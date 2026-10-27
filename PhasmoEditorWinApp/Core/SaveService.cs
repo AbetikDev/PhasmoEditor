@@ -2,6 +2,9 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace PhasmoEditor.Core;
 
@@ -29,7 +32,10 @@ public sealed class SaveService
         var values = new[] { money, level, prestige };
         for (int i = 0; i < Fields.Length; i++)
             updated[Fields[i]]!["value"] = values[i];
-        var encrypted = Encode(updated);
+        // Preserve Easy Save's nonstandard dictionary keys, spacing and all unrelated data.
+        var text = DecryptText(snapshot.Original);
+        var replacements = Fields.Zip(values).ToDictionary(p => p.First, p => p.Second);
+        var encrypted = EncryptText(PatchValues(text, replacements));
         if (!JsonNode.DeepEquals(updated, Decode(encrypted)))
             throw SaveErrors.Tag(new InvalidDataException("Verification failed."), "VerificationFailed");
         return Replace(snapshot, encrypted);
@@ -39,6 +45,30 @@ public sealed class SaveService
     {
         var backup = Load(backupPath);
         return Replace(current, backup.Original);
+    }
+
+    public string ExportOriginal(string path, string destinationDirectory)
+    {
+        // Read the current file on disk, never the pending editor values.
+        var snapshot = Load(path);
+        Directory.CreateDirectory(destinationDirectory);
+        string destination = System.IO.Path.Combine(destinationDirectory,
+            System.IO.Path.GetFileNameWithoutExtension(path) + "-old-" + DateTime.Now.ToString("yyyyMMdd-HHmmss")
+            + "-" + Guid.NewGuid().ToString("N") + System.IO.Path.GetExtension(path));
+        bool created = false;
+        try
+        {
+            using var stream = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            created = true;
+            stream.Write(snapshot.Original);
+            stream.Flush(true);
+            return destination;
+        }
+        catch
+        {
+            if (created) File.Delete(destination);
+            throw;
+        }
     }
 
     public string Restore(string currentPath, string backupPath)
@@ -89,12 +119,11 @@ public sealed class SaveService
             throw SaveErrors.Tag(new InvalidDataException("Unsupported or damaged save."), "InvalidFormat");
         try
         {
-            using var aes = Aes.Create();
-            aes.IV = bytes[..16];
-            aes.Key = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(Password), aes.IV, 100, HashAlgorithmName.SHA1, 16);
-            var plain = aes.DecryptCbc(bytes[16..], aes.IV, PaddingMode.PKCS7);
-            var text = new UTF8Encoding(false, true).GetString(plain).TrimStart('\uFEFF').TrimEnd('\0');
-            var document = JsonNode.Parse(text) as JsonObject
+            var text = DecryptText(bytes).TrimStart('\uFEFF').TrimEnd('\0');
+            // Match quoted strings first, so digits inside strings are never rewritten.
+            var normalized = Regex.Replace(text, "\"(?:\\\\.|[^\"\\\\])*\"|-?[0-9]+(?=\\s*:)",
+                m => m.Value.StartsWith('"') ? m.Value : "\"" + m.Value + "\"");
+            var document = JsonNode.Parse(normalized) as JsonObject
                 ?? throw SaveErrors.Tag(new InvalidDataException("Expected a JSON object."), "ExpectedObject");
             foreach (var field in Fields) ReadValue(document, field);
             return document;
@@ -106,11 +135,53 @@ public sealed class SaveService
     }
 
     public static byte[] Encode(JsonObject document)
+        => EncryptText(document.ToJsonString());
+
+    public static string DecryptText(byte[] bytes)
+    {
+        using var aes = Aes.Create();
+        aes.IV = bytes[..16];
+        aes.Key = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(Password), aes.IV, 100, HashAlgorithmName.SHA1, 16);
+        return new UTF8Encoding(false, true).GetString(aes.DecryptCbc(bytes[16..], aes.IV, PaddingMode.PKCS7));
+    }
+
+    private static string PatchValues(string text, Dictionary<string, int> values)
+    {
+        int depth = 0;
+        string? field = null, property = null;
+        var changed = new HashSet<string>();
+        var result = Regex.Replace(text, "\"(?:\\\\.|[^\"\\\\])*\"|[{}\\[\\]]|-?[0-9]+", m =>
+        {
+            string token = m.Value;
+            if (token is "{" or "[") { depth++; return token; }
+            if (token is "}" or "]") { depth--; return token; }
+            if (token.StartsWith('"'))
+            {
+                var tail = text.AsSpan(m.Index + m.Length).TrimStart();
+                if (!tail.IsEmpty && tail[0] == ':')
+                {
+                    if (depth == 1) field = JsonSerializer.Deserialize<string>(token);
+                    if (depth == 2) property = JsonSerializer.Deserialize<string>(token);
+                }
+                return token;
+            }
+            if (depth == 2 && property == "value" && field is not null && values.TryGetValue(field, out int value))
+            {
+                if (!changed.Add(field)) throw new InvalidDataException("Duplicate editable field.");
+                return value.ToString(CultureInfo.InvariantCulture);
+            }
+            return token;
+        });
+        if (changed.Count != values.Count) throw new InvalidDataException("Missing editable field.");
+        return result;
+    }
+
+    private static byte[] EncryptText(string text)
     {
         using var aes = Aes.Create();
         aes.GenerateIV();
         aes.Key = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(Password), aes.IV, 100, HashAlgorithmName.SHA1, 16);
-        var encrypted = aes.EncryptCbc(Encoding.UTF8.GetBytes(document.ToJsonString()), aes.IV, PaddingMode.PKCS7);
+        var encrypted = aes.EncryptCbc(Encoding.UTF8.GetBytes(text), aes.IV, PaddingMode.PKCS7);
         return [.. aes.IV, .. encrypted];
     }
 

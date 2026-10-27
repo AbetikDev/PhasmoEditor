@@ -53,6 +53,17 @@ Restoring also backs up the current file. Legacy **SaveFileBackup.txt** copies a
 
 ## Build
 
+For automatic setup, double-click **Install-and-build.cmd**. It installs the .NET 10 SDK
+into your user folder, restores packages, runs checks and builds version 3.1.0 in
+`artifacts/release`. Internet is required for the first build. The resulting EXE works offline.
+
+Version 3.1 automatically opens the newest save and refreshes it every three seconds.
+Unsaved edits are kept when the file changes externally; use Reload to discard them
+and read the current file. Ctrl+S reviews and saves, F5 reloads.
+**Install everything** in the standalone EXE copies the app, including .NET, to
+`%LOCALAPPDATA%/PhasmoEditor/app/3.1.0` and creates a desktop shortcut.
+It does not install the game or download unrelated packages.
+
 Windows and .NET SDK 10 are required.
 
 ~~~powershell

@@ -9,6 +9,21 @@ public sealed class Localization : INotifyPropertyChanged
 {
     private static readonly Dictionary<string, (string En, string Ru)> Texts = new()
     {
+        ["Waiting"] = ("Open a save to edit its values.", "Откройте сохранение для редактирования."),
+        ["ExternalChange"] = ("The file changed externally. Your edits are kept. Press Reload to load the new values.", "Файл изменился извне. Ваши правки сохранены в полях. Нажмите «Обновить», чтобы загрузить новые данные."),
+        ["NumberHint"] = ("Enter whole numbers from 0 to 2147483647. Check the highlighted fields.", "Введите целые числа от 0 до 2147483647. Проверьте выделенные поля."),
+        ["Unsaved"] = ("Unsaved changes • Ctrl+S to review and save", "Есть изменения • Ctrl+S — проверить и сохранить"),
+        ["UpToDate"] = ("Up to date • Automatic refresh every 3 seconds • F5 to reload", "Данные актуальны • Автообновление каждые 3 секунды • F5 — обновить"),
+        ["DiscardTitle"] = ("Discard edits?", "Сбросить правки?"),
+        ["DiscardBody"] = ("There are unsaved edits. Continue and discard them?", "Есть несохранённые изменения. Продолжить и сбросить их?"),
+        ["Install"] = ("Install everything", "Установить всё"),
+        ["ExportOriginal"] = ("Save old version", "Сохранить старую версию"),
+        ["ExportOriginalHint"] = ("Copy the current save file to your desktop before editing. Unsaved edits are not included.", "Сохранить копию текущего игрового файла на рабочий стол перед изменениями. Несохранённые правки не включаются."),
+        ["OriginalExported"] = ("Old version saved to your desktop: {0}", "Старая версия сохранена на рабочий стол: {0}"),
+        ["InstallHint"] = ("Includes .NET. Install the app and a desktop shortcut with one click.", ".NET уже внутри. Установите приложение и ярлык одним нажатием."),
+        ["Installing"] = ("Installing the app and included components…", "Устанавливаем приложение со всеми компонентами…"),
+        ["Installed"] = ("Ready. All components are included. Desktop shortcut created. Location: {0}", "Готово. Все компоненты включены. Ярлык создан на рабочем столе. Папка: {0}"),
+        ["InstallRelease"] = ("Use the standalone release EXE to install. For source builds, run Install-and-build.cmd.", "Для установки запустите готовый EXE. Для исходников используйте Install-and-build.cmd."),
         ["Minimize"] = ("Minimize", "Свернуть"),
         ["Maximize"] = ("Maximize / restore", "Развернуть / восстановить"),
         ["Close"] = ("Close", "Закрыть"),

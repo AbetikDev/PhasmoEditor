@@ -3,7 +3,7 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:local="clr-namespace:PhasmoEditor"
  xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
- Title="PhasmoEditor 3.0" Width="1120" Height="880" MinWidth="960" MinHeight="730"
+ Title="PhasmoEditor 3.1.1" Width="1120" Height="880" MinWidth="900" MinHeight="620"
  WindowStyle="None" ResizeMode="CanResize" Background="#0D1312"
  Foreground="#EEF3EF" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13"
  WindowStartupLocation="CenterScreen" UseLayoutRounding="True">
@@ -83,7 +83,7 @@
     <ControlTemplate TargetType="TextBox">
      <Border x:Name="InputBorder" CornerRadius="11" Background="{TemplateBinding Background}"
       BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-      <ScrollViewer x:Name="PART_ContentHost" Margin="0" Padding="0"/>
+      <ScrollViewer x:Name="PART_ContentHost" Margin="12,0" VerticalAlignment="Center"/>
      </Border>
      <ControlTemplate.Triggers>
       <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="InputBorder" Property="BorderBrush" Value="#B9D7BC"/></Trigger>
@@ -195,7 +195,7 @@
     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
      <Border Width="8" Height="8" CornerRadius="4" Background="#B9D7BC" Margin="0,0,10,0"/>
      <TextBlock Text="PHASMOEDITOR" FontSize="11" FontWeight="SemiBold" Foreground="#C4D2C7"/>
-     <TextBlock Text=" /  3.0" FontFamily="Consolas" FontSize="11" Foreground="#647C6D" Margin="8,0,0,0"/>
+     <TextBlock Text=" /  3.1.1" FontFamily="Consolas" FontSize="11" Foreground="#647C6D" Margin="8,0,0,0"/>
     </StackPanel>
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
      <Button x:Name="EnglishButton" Content="EN" Style="{StaticResource EnglishSwitch}" Click="English_Click" Margin="0,0,4,0"/>
@@ -228,6 +228,8 @@
        <Button Content="{Binding [NavBackups], Source={StaticResource Strings}}" Click="NavigateBackups_Click" Style="{StaticResource QuietButton}"/>
       </StackPanel>
       <StackPanel Grid.Row="3">
+       <Button x:Name="InstallButton" Content="{Binding [Install], Source={StaticResource Strings}}" Click="Install_Click" Padding="8,12"/>
+       <TextBlock Text="{Binding [InstallHint], Source={StaticResource Strings}}" TextWrapping="Wrap" FontSize="11" Foreground="#91A698" Margin="0,8,0,14"/>
        <Grid Height="44" Margin="0,0,0,14" ClipToBounds="True" Opacity="0.45">
         <Path Data="M 0,22 L 26,22 29,18 32,24 37,22 49,22 53,9 58,36 63,17 67,22 88,22 92,19 95,24 100,22 152,22"
          Stroke="#A9D2AC" StrokeThickness="1" Stretch="Fill" VerticalAlignment="Center"/>
@@ -250,7 +252,7 @@
        <StackPanel>
         <TextBlock Text="{Binding [Subtitle], Source={StaticResource Strings}}" Style="{StaticResource Eyebrow}" Margin="0,0,0,8"/>
         <TextBlock Text="{Binding [Heading], Source={StaticResource Strings}}" FontSize="28" FontWeight="SemiBold"/>
-        <TextBlock Text="{Binding [Description], Source={StaticResource Strings}}" Foreground="#91A698" Margin="0,7,0,0"/>
+        <TextBlock Text="{Binding [Description], Source={StaticResource Strings}}" TextWrapping="Wrap" Foreground="#91A698" Margin="0,7,0,0"/>
        </StackPanel>
        <Border HorizontalAlignment="Right" VerticalAlignment="Top" CornerRadius="9" Background="#25382A" Padding="10,6" Margin="0,4,0,0">
         <TextBlock Text="{Binding [LocalFile], Source={StaticResource Strings}}" Style="{StaticResource Eyebrow}" Foreground="#B9D7BC"/>
@@ -297,9 +299,11 @@
           <TextBlock x:Name="PrestigeCurrent" Text="{Binding [CurrentEmpty], Source={StaticResource Strings}}" FontSize="11" Foreground="#8DA192" Margin="2,8,0,0"/>
          </StackPanel>
         </Grid>
+        <TextBlock x:Name="EditorState" TextWrapping="Wrap" Foreground="#B9D7BC" FontSize="12" Margin="0,16,0,0"/>
         <Grid Margin="0,20,0,0">
+         <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
          <TextBlock Text="{Binding [CloudNote], Source={StaticResource Strings}}" FontSize="11" Foreground="#A8AE96" VerticalAlignment="Center" LineHeight="17"/>
-         <Button x:Name="SaveButton" Content="{Binding [Save], Source={StaticResource Strings}}" Click="Save_Click" IsEnabled="False"
+         <Button x:Name="SaveButton" Grid.Column="1" Content="{Binding [Save], Source={StaticResource Strings}}" Click="Save_Click" IsEnabled="False"
           Background="#B9D7BC" Foreground="#182D1D" BorderBrush="#D0E6D1" HorizontalAlignment="Right" Padding="18,12"/>
         </Grid>
        </StackPanel>
@@ -313,6 +317,9 @@
          <TextBlock Text="{Binding [BackupsHint], Source={StaticResource Strings}}" Foreground="#91A698" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </Grid>
         <ComboBox x:Name="BackupList" ToolTip="{Binding [SelectBackup], Source={StaticResource Strings}}" Margin="0,0,0,12"/>
+        <Button x:Name="ExportOriginalButton" Content="{Binding [ExportOriginal], Source={StaticResource Strings}}"
+         ToolTip="{Binding [ExportOriginalHint], Source={StaticResource Strings}}" Click="ExportOriginal_Click"
+         IsEnabled="False" HorizontalAlignment="Left" Margin="0,0,0,12"/>
         <StackPanel Orientation="Horizontal">
          <Button Content="{Binding [Restore], Source={StaticResource Strings}}" Click="Restore_Click"/>
          <Button Content="{Binding [OpenFolder], Source={StaticResource Strings}}" Click="OpenBackups_Click" Style="{StaticResource QuietButton}" Margin="10,0,0,0"/>

@@ -18,6 +18,13 @@ public partial class MainWindow : Window
     private string statusKey = "Welcome";
     private object[] statusArguments = [];
     private Exception? statusError;
+    private bool filling;
+    private bool switching;
+    private bool dialogOpen;
+    private bool stale;
+    private readonly System.Windows.Threading.DispatcherTimer refreshTimer = new() { Interval = TimeSpan.FromSeconds(3) };
+    private bool IsDirty => loaded is not null && (MoneyInput.Text != loaded.Money.ToString(CultureInfo.InvariantCulture)
+        || LevelInput.Text != loaded.Level.ToString(CultureInfo.InvariantCulture) || PrestigeInput.Text != loaded.Prestige.ToString(CultureInfo.InvariantCulture));
     public Localization Strings => (Localization)Resources["Strings"];
     public MainWindow() : this(null) { }
     public MainWindow(string? settingsPath)
@@ -25,6 +32,18 @@ public partial class MainWindow : Window
         InitializeComponent();
         Strings.Initialize(settingsPath);
         RefreshLanguage();
+        foreach (var input in new[] { MoneyInput, LevelInput, PrestigeInput }) input.TextChanged += InputChanged;
+        UpdateEditor();
+        Loaded += (_, _) => { if (settingsPath is null) Discover_Click(this, new RoutedEventArgs()); refreshTimer.Start(); };
+        refreshTimer.Tick += (_, _) => RefreshFromDisk();
+        Closing += (_, e) => { if (!CanDiscard()) e.Cancel = true; };
+        Closed += (_, _) => refreshTimer.Stop();
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.S && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+            { if (SaveButton.IsEnabled) Save_Click(this, new RoutedEventArgs()); e.Handled = true; }
+            if (e.Key == System.Windows.Input.Key.F5) { Reload_Click(this, new RoutedEventArgs()); e.Handled = true; }
+        };
     }
 
     private void English_Click(object sender, RoutedEventArgs e) => ChangeLanguage("en");
@@ -42,6 +61,35 @@ public partial class MainWindow : Window
         LevelCurrent.Text = loaded is null ? Strings["CurrentEmpty"] : Strings.Format("CurrentValue", loaded.Level);
         PrestigeCurrent.Text = loaded is null ? Strings["CurrentEmpty"] : Strings.Format("CurrentValue", loaded.Prestige);
         Status.Text = statusError is null ? Strings.Format(statusKey, statusArguments) : Strings.Describe(statusError);
+        if (EditorState is not null) UpdateEditor();
+    }
+    private void InputChanged(object sender, TextChangedEventArgs e) { if (!filling) UpdateEditor(); }
+    private void UpdateEditor()
+    {
+        bool valid = loaded is not null;
+        foreach (var input in new[] { MoneyInput, LevelInput, PrestigeInput })
+        {
+            input.IsEnabled = loaded is not null;
+            bool ok = int.TryParse(input.Text, NumberStyles.None, CultureInfo.InvariantCulture, out _);
+            input.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(ok || loaded is null ? "#35483A" : "#E38A80"));
+            valid &= ok;
+        }
+        SaveButton.IsEnabled = valid && IsDirty && !stale;
+        ExportOriginalButton.IsEnabled = loaded is not null;
+        EditorState.Text = Strings[loaded is null ? "Waiting" : stale ? "ExternalChange" : !valid ? "NumberHint" : IsDirty ? "Unsaved" : "UpToDate"];
+    }
+    private bool CanDiscard() => !IsDirty || Confirm("DiscardTitle", Strings["DiscardBody"]);
+    private void RefreshFromDisk()
+    {
+        if (loaded is null || dialogOpen) return;
+        try
+        {
+            if (File.ReadAllBytes(loaded.Path).AsSpan().SequenceEqual(loaded.Original))
+            { stale = false; UpdateEditor(); return; }
+            if (IsDirty) { stale = true; UpdateEditor(); return; }
+            Load(loaded.Path);
+        }
+        catch (Exception ex) { stale = true; UpdateEditor(); statusError = ex; Status.Text = Strings.Describe(ex); }
     }
     private void SetStatus(string key, params object[] arguments)
     {
@@ -58,6 +106,38 @@ public partial class MainWindow : Window
     private void OpenGitHub_Click(object sender, RoutedEventArgs e) => Run(() =>
         Process.Start(new ProcessStartInfo("https://github.com/stth12") { UseShellExecute = true }));
 
+    private async void Install_Click(object sender, RoutedEventArgs e)
+    {
+        InstallButton.IsEnabled = false;
+        SetStatus("Installing");
+        try
+        {
+#pragma warning disable IL3000
+            if (!string.IsNullOrEmpty(typeof(MainWindow).Assembly.Location)) { SetStatus("InstallRelease"); return; }
+#pragma warning restore IL3000
+            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PhasmoEditor", "app", "3.1.1");
+            var destination = Path.Combine(directory, "PhasmoEditor.exe");
+            var source = Environment.ProcessPath!;
+            await System.Threading.Tasks.Task.Run(() =>
+            {
+                Directory.CreateDirectory(directory);
+                if (!string.Equals(source, destination, StringComparison.OrdinalIgnoreCase)) File.Copy(source, destination, true);
+            });
+            var shellType = Type.GetTypeFromProgID("WScript.Shell") ?? throw new IOException("Shortcut service unavailable.");
+            dynamic shell = Activator.CreateInstance(shellType)!;
+            try
+            {
+                dynamic shortcut = shell.CreateShortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "PhasmoEditor.lnk"));
+                try { shortcut.TargetPath = destination; shortcut.WorkingDirectory = directory; shortcut.Description = "PhasmoEditor 3.1"; shortcut.Save(); }
+                finally { System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shortcut); }
+            }
+            finally { System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell); }
+            SetStatus("Installed", directory);
+        }
+        catch (Exception ex) { statusError = ex; Status.Text = Strings.Describe(ex); }
+        finally { InstallButton.IsEnabled = true; }
+    }
+
     private void Run(Action action)
     {
         try { action(); }
@@ -66,6 +146,10 @@ public partial class MainWindow : Window
 
     private void Load(string path)
     {
+        filling = true;
+        stale = false;
+        try
+        {
         loaded = null;
         selectedPath = path;
         SaveButton.IsEnabled = false;
@@ -82,32 +166,47 @@ public partial class MainWindow : Window
         SaveButton.IsEnabled = true;
         SetStatus("Loaded");
         RefreshLanguage();
+        }
+        finally { filling = false; UpdateEditor(); }
     }
 
     private void Discover_Click(object sender, RoutedEventArgs e) => Run(() =>
     {
+        if (!CanDiscard()) return;
         string directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "AppData", "LocalLow", "Kinetic Games", "Phasmophobia");
         var paths = SaveService.Discover(directory);
+        switching = true;
         Candidates.ItemsSource = paths;
+        switching = false;
         if (paths.Length == 0) SetStatus("NoSaves"); else SetStatus("FoundCount", paths.Length);
-        if (paths.Length == 1) Candidates.SelectedIndex = 0;
+        if (paths.Length > 0)
+        {
+            var newest = paths.OrderByDescending(File.GetLastWriteTimeUtc).First();
+            switching = true; Candidates.SelectedItem = newest; switching = false;
+            Load(newest);
+        }
     });
 
     private void Candidates_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (Candidates.SelectedItem is string path) Run(() => Load(path));
+        if (switching) return;
+        if (Candidates.SelectedItem is string path) Run(() =>
+        {
+            if (CanDiscard()) Load(path);
+            else { switching = true; Candidates.SelectedItem = selectedPath; switching = false; }
+        });
     }
 
     private void Browse_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog { Filter = Strings["FileFilter"], Title = Strings["Browse"], CheckFileExists = true };
-        if (dialog.ShowDialog(this) == true) Run(() => Load(dialog.FileName));
+        if (dialog.ShowDialog(this) == true && CanDiscard()) Run(() => Load(dialog.FileName));
     }
 
     private void Reload_Click(object sender, RoutedEventArgs e)
     {
-        if (selectedPath is not null) Run(() => Load(selectedPath));
+        if (selectedPath is not null && CanDiscard()) Run(() => Load(selectedPath));
     }
 
     private int Parse(TextBox input, string nameKey)
@@ -150,7 +249,9 @@ public partial class MainWindow : Window
         actions.Children.Add(cancel); actions.Children.Add(accept); panel.Children.Add(actions);
         dialog.Content = new Border { CornerRadius = new CornerRadius(16), BorderThickness = new Thickness(1),
             BorderBrush = new SolidColorBrush(Color.FromRgb(73, 98, 79)), Child = panel };
-        return dialog.ShowDialog() == true;
+        dialogOpen = true;
+        try { return dialog.ShowDialog() == true; }
+        finally { dialogOpen = false; }
     }
 
     private void Save_Click(object sender, RoutedEventArgs e) => Run(() =>
@@ -170,6 +271,7 @@ public partial class MainWindow : Window
 
     private void Restore_Click(object sender, RoutedEventArgs e) => Run(() =>
     {
+        if (!CanDiscard()) return;
         if (selectedPath is null || !File.Exists(selectedPath) || BackupList.SelectedItem is not string backup)
         { SetStatus("ChooseBackup"); return; }
         CheckGame();
@@ -186,6 +288,16 @@ public partial class MainWindow : Window
         string directory = SaveService.BackupDirectory(selectedPath);
         if (!Directory.Exists(directory)) { SetStatus("NoBackups"); return; }
         Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
+    });
+
+    private void ExportOriginal_Click(object sender, RoutedEventArgs e) => Run(() =>
+    {
+        if (selectedPath is null) return;
+        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (string.IsNullOrWhiteSpace(desktop)) throw new DirectoryNotFoundException();
+        string exported = service.ExportOriginal(selectedPath, desktop);
+        SetStatus("OriginalExported", exported);
+        Status.BringIntoView();
     });
 }
 
